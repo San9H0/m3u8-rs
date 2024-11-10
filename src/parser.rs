@@ -352,6 +352,8 @@ enum MediaPlaylistTag {
     IFramesOnly,
     Start(Start),
     IndependentSegments,
+    Key(Key),
+    Map(Map),
 }
 
 fn media_playlist_tag(i: &[u8]) -> IResult<&[u8], MediaPlaylistTag> {
@@ -423,6 +425,12 @@ fn media_playlist_from_tags(mut tags: Vec<MediaPlaylistTag>) -> MediaPlaylist {
             MediaPlaylistTag::IndependentSegments => {
                 media_playlist.independent_segments = true;
             }
+            MediaPlaylistTag::Key(key) => {
+                media_playlist.key = Some(key);
+            }
+            MediaPlaylistTag::Map(m) => {
+                media_playlist.map = Some(m);
+            }
             MediaPlaylistTag::Segment(segment_tag) => match segment_tag {
                 SegmentTag::Extinf(d, t) => {
                     next_segment.duration = d;
@@ -449,6 +457,7 @@ fn media_playlist_from_tags(mut tags: Vec<MediaPlaylistTag>) -> MediaPlaylist {
                 SegmentTag::Unknown(t) => {
                     next_segment.unknown_tags.push(t);
                 }
+                SegmentTag::Comment(_) => {}
                 SegmentTag::Uri(u) => {
                     next_segment.key = encryption_key.clone();
                     next_segment.map = map.clone();

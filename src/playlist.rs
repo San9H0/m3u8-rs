@@ -724,6 +724,10 @@ pub struct MediaPlaylist {
     pub segments: Vec<MediaSegment>,
     /// `#EXT-X-DISCONTINUITY-SEQUENCE:<number>`
     pub discontinuity_sequence: u64,
+    /// `#EXT-X-KEY:<attribute-list>`
+    pub key: Option<Key>,
+    /// `#EXT-X-MAP:<attribute-list>`
+    pub map: Option<Map>,
     /// `#EXT-X-ENDLIST`
     pub end_list: bool,
     /// `#EXT-X-PLAYLIST-TYPE`
@@ -736,6 +740,14 @@ pub struct MediaPlaylist {
     pub independent_segments: bool,
     /// Unknown tags before the first media segment
     pub unknown_tags: Vec<ExtTag>,
+    /// `#EXT-X-SERVER-COLNTROL:CAN-BLOCK-RELOAD=YES|NO,PART-HOLD-BACK=<s>,MAX-BLOCK-DURATION=<s>`
+    pub server_control: Option<ServerControl>,
+    /// `#EXT-X_PART:DURATION=<s>,URI="<uri>",BYTERANGE="<n>[@<o>]"` tags
+    pub parts: Vec<Part>,
+    /// `#EXT-X-PART-INF:PART-TARGET=<.5 f32>`
+    pub part_inf: Option<f32>,
+    /// `#EXT-X-PRELOAD-HINT:TYPE=<s>,URI="<uri>"`
+    pub preload_hint: Option<PreloadHint>,
 }
 
 impl MediaPlaylist {
@@ -750,8 +762,23 @@ impl MediaPlaylist {
         }
         writeln!(w, "#EXT-X-TARGETDURATION:{}", self.target_duration)?;
 
-        if self.media_sequence != 0 {
-            writeln!(w, "#EXT-X-MEDIA-SEQUENCE:{}", self.media_sequence)?;
+        if let Some(ref server_control) = self.server_control {
+            server_control.write_to(w)?;
+        };
+        if let Some(ref part_inf) = self.part_inf {
+            writeln!(w, "#EXT-X-PART-INF:PART-TARGET={:.5}", part_inf)?;
+        };
+
+        writeln!(w, "#EXT-X-MEDIA-SEQUENCE:{}", self.media_sequence)?;
+        if let Some(ref map) = self.map {
+            write!(w, "#EXT-X-MAP:")?;
+            map.write_attributes_to(w)?;
+            writeln!(w)?;
+        }
+        if let Some(ref key) = self.key {
+            write!(w, "#EXT-X-KEY:")?;
+            key.write_attributes_to(w)?;
+            writeln!(w)?;
         }
         if self.discontinuity_sequence != 0 {
             writeln!(
@@ -771,6 +798,12 @@ impl MediaPlaylist {
         }
         for segment in &self.segments {
             segment.write_to(w)?;
+        }
+        for parts in &self.parts {
+            parts.write_to(w)?;
+        }
+        if let Some(ref preload_hint) = self.preload_hint {
+            preload_hint.write_to(w)?;
         }
         if self.end_list {
             writeln!(w, "#EXT-X-ENDLIST")?;
@@ -847,6 +880,8 @@ pub struct MediaSegment {
     pub daterange: Option<DateRange>,
     /// `#EXT-`
     pub unknown_tags: Vec<ExtTag>,
+    /// `EXT-X-PART:DURATION=<s>,URI="<uri>",BYTERANGE="<n>[@<o>]"` tags
+    pub parts: Vec<Part>,
 }
 
 impl MediaSegment {
@@ -887,6 +922,9 @@ impl MediaSegment {
         }
         for unknown_tag in &self.unknown_tags {
             writeln!(w, "{}", unknown_tag)?;
+        }
+        for parts in &self.parts {
+            parts.write_to(w)?;
         }
 
         match WRITE_OPT_FLOAT_PRECISION.load(Ordering::Relaxed) {
@@ -1140,6 +1178,77 @@ impl DateRange {
                 write!(w, ",{}={}", name, attr)?;
             }
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct Part {
+    pub duration: f32,
+    pub uri: String,
+    pub independent: bool,
+}
+
+impl Part {
+    pub fn empty() -> Part {
+        Default::default()
+    }
+
+    pub(crate) fn write_to<T: Write>(&self, w: &mut T) -> std::io::Result<()> {
+        write!(w, "#EXT-X-PART:")?;
+        write!(w, "DURATION={:.5}", self.duration)?;
+        write!(w, ",URI=\"{}\"", self.uri)?;
+        if self.independent {
+            write!(w, ",INDEPENDENT=YES")?;
+        }
+        writeln!(w)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+pub struct PreloadHint {
+    pub r#type: String,
+    pub uri: String,
+}
+
+impl PreloadHint {
+    pub fn empty() -> PreloadHint {
+        Default::default()
+    }
+
+    pub(crate) fn write_to<T: Write>(&self, w: &mut T) -> std::io::Result<()> {
+        write!(w, "#EXT-X-PRELOAD-HINT:")?;
+        write!(w, "TYPE={}", self.r#type)?;
+        write!(w, ",URI=\"{}\"", self.uri)?;
+        writeln!(w)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct ServerControl {
+    pub can_block_reload: bool,
+    pub part_hold_back: Option<f32>,
+    pub can_skip_util: Option<f32>,
+}
+
+impl ServerControl {
+    pub fn empty() -> ServerControl {
+        Default::default()
+    }
+    pub(crate) fn write_to<T: Write>(&self, w: &mut T) -> std::io::Result<()> {
+        write!(w, "#EXT-X-SERVER-CONTROL:")?;
+        if self.can_block_reload {
+            write!(w, "CAN-BLOCK-RELOAD=YES")?;
+        }
+        if let Some(part_hold_back) = self.part_hold_back {
+            write!(w, ",PART-HOLD-BACK={:.5}", part_hold_back)?;
+        }
+        if let Some(can_skip_util) = self.can_skip_util {
+            write!(w, ",CAN-SKIP-UNTIL={:.5}", can_skip_util)?;
+        }
+        writeln!(w)?;
         Ok(())
     }
 }
