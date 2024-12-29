@@ -355,6 +355,8 @@ fn create_and_parse_media_playlist_full() {
         target_duration: 3,
         media_sequence: 338559,
         discontinuity_sequence: 1234,
+        key: None,
+        map: None,
         end_list: true,
         playlist_type: Some(MediaPlaylistType::Vod),
         i_frames_only: true,
@@ -416,6 +418,10 @@ fn create_and_parse_media_playlist_full() {
             ..Default::default()
         }],
         unknown_tags: vec![],
+        server_control: None,
+        parts: vec![],
+        part_inf: None,
+        preload_hint: None,
     });
     let playlist_parsed = print_create_and_parse_playlist(&mut playlist_original);
     assert_eq!(playlist_original, playlist_parsed);
